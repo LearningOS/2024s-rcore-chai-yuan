@@ -10,7 +10,7 @@
 //! `sys_` then the name of the syscall. You can find functions like this in
 //! submodules, and you should also implement syscalls this way.
 
-use crate::{config::*, task::TASK_MANAGER};
+use crate::{config::*, task::get_current_task};
 // 完成实验使用的全局任务信息记录表
 static mut TASK_INFOS: [TaskInfo; MAX_APP_NUM] = [TaskInfo {
     status: crate::task::TaskStatus::Running,
@@ -37,7 +37,7 @@ use process::*;
 /// handle syscall exception with `syscall_id` and other arguments
 pub fn syscall(syscall_id: usize, args: [usize; 3]) -> isize {
     // 记录系统调用
-    let current = TASK_MANAGER.get_current_task();
+    let current = get_current_task();
     unsafe {
         TASK_INFOS[current].syscall_times[syscall_id] += 1;
     }
