@@ -90,6 +90,13 @@ impl TaskManager {
         panic!("unreachable in run_first_task!");
     }
 
+    /// 获得当前任务的编号
+    pub fn get_current_task(&self) -> usize {
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        current
+    }
+
     /// Change the status of current `Running` task into `Ready`.
     fn mark_current_suspended(&self) {
         let mut inner = self.inner.exclusive_access();

@@ -10,6 +10,14 @@
 //! `sys_` then the name of the syscall. You can find functions like this in
 //! submodules, and you should also implement syscalls this way.
 
+use crate::{config::*, task::TASK_MANAGER};
+// 完成实验使用的全局任务信息记录表
+static mut TASK_INFOS: [TaskInfo; MAX_APP_NUM] = [TaskInfo {
+    status: crate::task::TaskStatus::Running,
+    syscall_times: [0; MAX_SYSCALL_NUM],
+    time: 0,
+}; MAX_APP_NUM];
+
 /// write syscall
 const SYSCALL_WRITE: usize = 64;
 /// exit syscall
@@ -28,6 +36,12 @@ use fs::*;
 use process::*;
 /// handle syscall exception with `syscall_id` and other arguments
 pub fn syscall(syscall_id: usize, args: [usize; 3]) -> isize {
+    // 记录系统调用
+    let current = TASK_MANAGER.get_current_task();
+    unsafe {
+        TASK_INFOS[current].syscall_times[syscall_id] += 1;
+    }
+
     match syscall_id {
         SYSCALL_WRITE => sys_write(args[0], args[1] as *const u8, args[2]),
         SYSCALL_EXIT => sys_exit(args[0] as i32),
