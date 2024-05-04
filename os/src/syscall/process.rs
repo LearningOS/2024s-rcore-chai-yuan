@@ -69,6 +69,7 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
 /// HINT: What if [`TaskInfo`] is splitted by two pages ?
 pub fn sys_task_info(ti: *mut TaskInfo) -> isize {
     trace!("kernel: sys_task_info NOT IMPLEMENTED YET!");
+    // TODO 处理跨页问题
     let pa = translated_virtual_ptr(current_user_token(), VirtAddr(ti as usize)).unwrap();
     let taskinfo_ptr = pa.0 as *mut TaskInfo;
     unsafe {
