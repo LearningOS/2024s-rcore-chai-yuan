@@ -16,6 +16,7 @@ mod task;
 
 use crate::config::MAX_SYSCALL_NUM;
 use crate::loader::{get_app_data, get_num_app};
+use crate::mm::{MapPermission, VirtAddr};
 use crate::sync::UPSafeCell;
 use crate::timer::get_time_ms;
 use crate::trap::TrapContext;
@@ -133,6 +134,46 @@ impl TaskManager {
         inner.tasks[inner.current_task].syscall_times
     }
 
+    fn add_map_area(&self, start: usize, len: usize, port: usize) -> isize {
+        if (port & 0x7 == 0) || (port & !0x7 != 0) {
+            return -1;
+        }
+
+        let mut inner = self.inner.exclusive_access();
+        let current_task = inner.current_task;
+
+        let start_va = VirtAddr::from(start);
+        let end_va = VirtAddr::from(start + len);
+        let mut per = MapPermission::empty();
+
+        if port & 0x01 != 0 {
+            per |= MapPermission::R;
+        }
+        if port & 0x02 != 0 {
+            per |= MapPermission::W;
+        }
+        if port & 0x04 != 0 {
+            per |= MapPermission::X;
+        }
+
+        inner.tasks[current_task]
+            .memory_set
+            .insert_framed_area(start_va, end_va, per);
+        0
+    }
+
+    fn remove_map_area(&self, start: usize) -> isize {
+        let mut inner = self.inner.exclusive_access();
+        let current_task = inner.current_task;
+
+        let start_va = VirtAddr::from(start);
+
+        inner.tasks[current_task]
+            .memory_set
+            .remove_framed_area(start_va);
+        0
+    }
+
     /// Get the current 'Running' task's token.
     fn get_current_token(&self) -> usize {
         let inner = self.inner.exclusive_access();
@@ -238,4 +279,14 @@ pub fn get_frist_run_time() -> usize {
 /// 获得系统调用次数
 pub fn get_syscall_times() -> [u32; MAX_SYSCALL_NUM] {
     TASK_MANAGER.get_syscall_times()
+}
+
+/// 添加新的虚拟内存区域
+pub fn task_add_map_area(start: usize, len: usize, port: usize) -> isize {
+    TASK_MANAGER.add_map_area(start, len, port)
+}
+
+/// 移除虚拟内存区域
+pub fn task_remove_map_area(start: usize) -> isize {
+    TASK_MANAGER.remove_map_area(start)
 }

@@ -63,6 +63,12 @@ impl MemorySet {
             None,
         );
     }
+    /// 移除一个区域
+    pub fn remove_framed_area(&mut self, start_va: VirtAddr) {
+        self.areas
+            .retain(|area| area.vpn_range.l != start_va.into());
+    }
+
     fn push(&mut self, mut map_area: MapArea, data: Option<&[u8]>) {
         map_area.map(&mut self.page_table);
         if let Some(data) = data {
