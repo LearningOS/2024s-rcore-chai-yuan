@@ -7,7 +7,8 @@ use crate::{
     mm::{translated_virtual_ptr, VirtAddr},
     task::{
         change_program_brk, current_user_token, exit_current_and_run_next, get_frist_run_time,
-        get_syscall_times, suspend_current_and_run_next, task_add_map_area, TaskStatus,
+        get_syscall_times, suspend_current_and_run_next, task_add_map_area, task_remove_map_area,
+        TaskStatus,
     },
     timer::{get_time_ms, get_time_us},
 };
@@ -88,11 +89,11 @@ pub fn sys_mmap(start: usize, len: usize, port: usize) -> isize {
 }
 
 // YOUR JOB: Implement munmap.
-pub fn sys_munmap(_start: usize, _len: usize) -> isize {
+pub fn sys_munmap(start: usize, len: usize) -> isize {
     trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
-    // task_remove_map_area(start)
-    0
+    task_remove_map_area(start, len)
 }
+
 /// change data segment size
 pub fn sys_sbrk(size: i32) -> isize {
     trace!("kernel: sys_sbrk");

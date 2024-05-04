@@ -12,6 +12,7 @@ use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::arch::asm;
+use core::isize;
 use lazy_static::*;
 use riscv::register::satp;
 
@@ -37,6 +38,8 @@ lazy_static! {
 pub struct MemorySet {
     page_table: PageTable,
     areas: Vec<MapArea>,
+    // 为了方便动态分配而创建的变量
+    dyn_areas: BTreeMap<VirtPageNum, FrameTracker>,
 }
 
 impl MemorySet {
@@ -45,6 +48,7 @@ impl MemorySet {
         Self {
             page_table: PageTable::new(),
             areas: Vec::new(),
+            dyn_areas: BTreeMap::new(),
         }
     }
     /// Get the page table token
@@ -63,11 +67,56 @@ impl MemorySet {
             None,
         );
     }
-    /// 移除一个区域
-    pub fn remove_framed_area(&mut self, start_va: VirtAddr) {
-        self.areas
-            .retain(|area| area.vpn_range.l != start_va.into());
+    /// 新增一块映射区域
+    pub fn insert_dyn_area(
+        &mut self,
+        start_va: VirtAddr,
+        end_va: VirtAddr,
+        permission: MapPermission,
+    ) -> isize {
+        let mut start_vpn: VirtPageNum = start_va.into();
+        let end_vpn: VirtPageNum = end_va.ceil();
+        let pte_flags = PTEFlags::from_bits(permission.bits).unwrap();
+
+        while start_vpn != end_vpn {
+            if let Some(pte) = self.page_table.translate(start_vpn) {
+                // 已经被映射过了
+                if pte.is_valid() {
+                    return -1;
+                }
+            }
+            if let Some(ppn) = frame_alloc() {
+                self.page_table.map(start_vpn, ppn.ppn, pte_flags);
+                self.dyn_areas.insert(start_vpn, ppn);
+            } else {
+                return -1;
+            }
+            start_vpn.step();
+        }
+        0
     }
+    /// 移除一块映射区域
+    pub fn remove_dyn_area(&mut self, start_va: VirtAddr, end_va: VirtAddr) -> isize {
+        let mut start_vpn: VirtPageNum = start_va.into();
+        let end_vpn: VirtPageNum = end_va.ceil();
+
+        while start_vpn != end_vpn {
+            // 试图移除不存在的区域
+            if let Some(pte) = self.page_table.translate(start_vpn) {
+                if !pte.is_valid() {
+                    return -1;
+                }
+            } else {
+                return -1;
+            }
+
+            self.page_table.unmap(start_vpn);
+            self.dyn_areas.remove(&start_vpn);
+            start_vpn.step();
+        }
+        0
+    }
+
     fn push(&mut self, mut map_area: MapArea, data: Option<&[u8]>) {
         map_area.map(&mut self.page_table);
         if let Some(data) = data {

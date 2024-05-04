@@ -135,16 +135,19 @@ impl TaskManager {
     }
 
     fn add_map_area(&self, start: usize, len: usize, port: usize) -> isize {
+        let start_va = VirtAddr::from(start);
+        let end_va = VirtAddr::from(start + len);
+        let mut per = MapPermission::U;
+        // 处理错误
         if (port & 0x7 == 0) || (port & !0x7 != 0) {
+            return -1;
+        }
+        if !start_va.aligned() {
             return -1;
         }
 
         let mut inner = self.inner.exclusive_access();
         let current_task = inner.current_task;
-
-        let start_va = VirtAddr::from(start);
-        let end_va = VirtAddr::from(start + len);
-        let mut per = MapPermission::U;
 
         if port & 0x01 != 0 {
             per |= MapPermission::R;
@@ -160,20 +163,22 @@ impl TaskManager {
 
         inner.tasks[current_task]
             .memory_set
-            .insert_framed_area(start_va, end_va, per);
-        0
+            .insert_dyn_area(start_va, end_va, per)
     }
 
-    fn remove_map_area(&self, start: usize) -> isize {
+    fn remove_map_area(&self, start: usize, len: usize) -> isize {
+        let start_va = VirtAddr::from(start);
+        let end_va = VirtAddr::from(start + len);
+        if !start_va.aligned() {
+            return -1;
+        }
+
         let mut inner = self.inner.exclusive_access();
         let current_task = inner.current_task;
 
-        let start_va = VirtAddr::from(start);
-
         inner.tasks[current_task]
             .memory_set
-            .remove_framed_area(start_va);
-        0
+            .remove_dyn_area(start_va, end_va)
     }
 
     /// Get the current 'Running' task's token.
@@ -289,6 +294,6 @@ pub fn task_add_map_area(start: usize, len: usize, port: usize) -> isize {
 }
 
 /// 移除虚拟内存区域
-pub fn task_remove_map_area(start: usize) -> isize {
-    TASK_MANAGER.remove_map_area(start)
+pub fn task_remove_map_area(start: usize, len: usize) -> isize {
+    TASK_MANAGER.remove_map_area(start, len)
 }
