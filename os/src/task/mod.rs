@@ -144,7 +144,7 @@ impl TaskManager {
 
         let start_va = VirtAddr::from(start);
         let end_va = VirtAddr::from(start + len);
-        let mut per = MapPermission::empty();
+        let mut per = MapPermission::U;
 
         if port & 0x01 != 0 {
             per |= MapPermission::R;
@@ -155,6 +155,8 @@ impl TaskManager {
         if port & 0x04 != 0 {
             per |= MapPermission::X;
         }
+
+        info!("start_va : {:#X}", start_va.0);
 
         inner.tasks[current_task]
             .memory_set

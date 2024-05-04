@@ -68,7 +68,6 @@ impl MemorySet {
         self.areas
             .retain(|area| area.vpn_range.l != start_va.into());
     }
-
     fn push(&mut self, mut map_area: MapArea, data: Option<&[u8]>) {
         map_area.map(&mut self.page_table);
         if let Some(data) = data {
