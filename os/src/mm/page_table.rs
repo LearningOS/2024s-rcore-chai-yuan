@@ -202,6 +202,7 @@ pub fn translated_str(token: usize, ptr: *const u8) -> String {
     }
     string
 }
+
 /// Translate a ptr[u8] array through page table and return a mutable reference of T
 pub fn translated_refmut<T>(token: usize, ptr: *mut T) -> &'static mut T {
     //trace!("into translated_refmut!");
@@ -213,3 +214,27 @@ pub fn translated_refmut<T>(token: usize, ptr: *mut T) -> &'static mut T {
         .unwrap()
         .get_mut()
 }
+
+// pub unsafe fn virtaddr_write<T: Copy>(token: usize, vaddr: *const u8, data: T) -> isize {
+//     let size_of_data = core::mem::size_of::<T>();
+//     let mut buffers = translated_byte_buffer(token, vaddr as *const u8, size_of_data);
+//     // Create a slice from the data reference, then copy it into a Vec
+//     let data_slice = core::slice::from_raw_parts(&data as *const T as *const u8, size_of_data);
+//
+//     let mut offset = 0;
+//
+//     for buffer in buffers.iter_mut() {
+//         if offset >= size_of_data {
+//             break;
+//         }
+//         let to_write = &data_slice[offset..offset + buffer.len().min(size_of_data - offset)];
+//         buffer[..to_write.len()].copy_from_slice(to_write);
+//         offset += buffer.len();
+//     }
+//
+//     if offset < size_of_data {
+//         -1
+//     } else {
+//         0
+//     }
+// }
