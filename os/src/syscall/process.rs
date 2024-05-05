@@ -4,7 +4,7 @@ use core::usize;
 
 use crate::{
     config::MAX_SYSCALL_NUM,
-    mm::{translated_virtual_ptr, VirtAddr},
+    mm::virtaddr_write,
     task::{
         change_program_brk, current_user_token, exit_current_and_run_next, get_frist_run_time,
         get_syscall_times, suspend_current_and_run_next, task_add_map_area, task_remove_map_area,
@@ -14,7 +14,7 @@ use crate::{
 };
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct TimeVal {
     pub sec: usize,
     pub usec: usize,
@@ -22,6 +22,7 @@ pub struct TimeVal {
 
 /// Task information
 #[allow(dead_code)]
+#[derive(Clone, Copy)]
 pub struct TaskInfo {
     /// Task status in it's life cycle
     status: TaskStatus,
@@ -51,17 +52,13 @@ pub fn sys_yield() -> isize {
 pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
     trace!("kernel: sys_get_time");
     let us = get_time_us();
-    // 获得物理地址
-    // TODO 处理跨页问题
-    let pa = translated_virtual_ptr(current_user_token(), VirtAddr(ts as usize)).unwrap();
-    let timeval_ptr = pa.0 as *mut TimeVal;
-    unsafe {
-        *timeval_ptr = TimeVal {
-            sec: us / 1_000_000,
-            usec: us % 1_000_000,
-        };
-    }
-    0
+
+    let time_val = TimeVal {
+        sec: us / 1_000_000,
+        usec: us % 1_000_000,
+    };
+
+    unsafe { virtaddr_write(current_user_token(), ts as *const u8, time_val) }
 }
 
 /// YOUR JOB: Finish sys_task_info to pass testcases
@@ -70,16 +67,13 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
 pub fn sys_task_info(ti: *mut TaskInfo) -> isize {
     trace!("kernel: sys_task_info NOT IMPLEMENTED YET!");
     // TODO 处理跨页问题
-    let pa = translated_virtual_ptr(current_user_token(), VirtAddr(ti as usize)).unwrap();
-    let taskinfo_ptr = pa.0 as *mut TaskInfo;
-    unsafe {
-        *taskinfo_ptr = TaskInfo {
-            status: TaskStatus::Running,
-            syscall_times: get_syscall_times(),
-            time: get_time_ms() - get_frist_run_time(),
-        };
-    }
-    0
+    let taskinfo = TaskInfo {
+        status: TaskStatus::Running,
+        syscall_times: get_syscall_times(),
+        time: get_time_ms() - get_frist_run_time(),
+    };
+
+    unsafe { virtaddr_write(current_user_token(), ti as *const u8, taskinfo) }
 }
 
 // YOUR JOB: Implement mmap.

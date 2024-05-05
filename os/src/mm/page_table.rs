@@ -1,6 +1,5 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
 
-use super::PhysAddr;
 use super::{frame_alloc, FrameTracker, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
 use alloc::vec;
 use alloc::vec::Vec;
@@ -173,22 +172,27 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&
     v
 }
 
-/// 虚拟地址转物理地址
-pub fn translated_virtual_ptr(token: usize, ptr: VirtAddr) -> Option<PhysAddr> {
-    let page_table = PageTable::from_token(token);
-    let offset = ptr.page_offset();
-    let vpn = ptr.floor();
+/// 向一块虚拟内存写入数据，支持跨页
+pub unsafe fn virtaddr_write<T: Copy>(token: usize, vaddr: *const u8, data: T) -> isize {
+    let size_of_data = core::mem::size_of::<T>();
+    let mut buffers = translated_byte_buffer(token, vaddr as *const u8, size_of_data);
+    // Create a slice from the data reference, then copy it into a Vec
+    let data_slice = core::slice::from_raw_parts(&data as *const T as *const u8, size_of_data);
 
-    if let Some(pte) = page_table.translate(vpn) {
-        // 检查页表项是否有效，即确保它不是一个空映射
-        if pte.is_valid() {
-            let mut pa: PhysAddr = pte.ppn().into();
-            pa.0 += offset;
-            Some(pa)
-        } else {
-            None
+    let mut offset = 0;
+
+    for buffer in buffers.iter_mut() {
+        if offset >= size_of_data {
+            break;
         }
+        let to_write = &data_slice[offset..offset + buffer.len().min(size_of_data - offset)];
+        buffer[..to_write.len()].copy_from_slice(to_write);
+        offset += buffer.len();
+    }
+
+    if offset < size_of_data {
+        -1
     } else {
-        None
+        0
     }
 }
