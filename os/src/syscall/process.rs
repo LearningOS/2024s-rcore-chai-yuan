@@ -1,4 +1,6 @@
 //! Process management syscalls
+use core::isize;
+
 use alloc::sync::Arc;
 
 use crate::{
@@ -7,8 +9,8 @@ use crate::{
     mm::{translated_byte_buffer, translated_refmut, translated_str},
     task::{
         add_map_area, add_task, current_task, current_user_token, exit_current_and_run_next,
-        get_frist_run_time, get_syscall_times, remove_map_area, suspend_current_and_run_next,
-        TaskStatus,
+        get_frist_run_time, get_syscall_times, remove_map_area, set_scheduler_priority,
+        suspend_current_and_run_next, TaskStatus,
     },
     timer::{get_time_ms, get_time_us},
 };
@@ -195,19 +197,25 @@ pub fn sys_sbrk(size: i32) -> isize {
 
 /// YOUR JOB: Implement spawn.
 /// HINT: fork + exec =/= spawn
-pub fn sys_spawn(_path: *const u8) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_spawn NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
-    -1
+pub fn sys_spawn(path: *const u8) -> isize {
+    let path = translated_str(current_user_token(), path);
+    let current_task = current_task().unwrap();
+    let new_task = current_task.fork();
+    let new_pid = new_task.pid.0;
+    if let Some(data) = get_app_data_by_name(path.as_str()) {
+        new_task.exec(data);
+        add_task(new_task);
+        new_pid as isize
+    } else {
+        -1
+    }
 }
 
 // YOUR JOB: Set task priority.
-pub fn sys_set_priority(_prio: isize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_set_priority NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
+pub fn sys_set_priority(prio: isize) -> isize {
+    if prio >= 2 {
+        set_scheduler_priority(prio);
+        return prio;
+    }
     -1
 }

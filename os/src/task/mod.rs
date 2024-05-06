@@ -17,6 +17,7 @@ mod context;
 mod id;
 mod manager;
 mod processor;
+mod scheduler;
 mod switch;
 #[allow(clippy::module_inception)]
 mod task;
@@ -196,5 +197,13 @@ pub fn remove_map_area(start: usize, len: usize) -> isize {
         inner.memory_set.remove_dyn_area(start_va, end_va)
     } else {
         -1
+    }
+}
+
+/// 设置当前进程优先级
+pub fn set_scheduler_priority(prio: isize) {
+    if let Some(current) = current_task() {
+        let mut inner = current.inner_exclusive_access();
+        inner.scheduler.set_priority(prio);
     }
 }

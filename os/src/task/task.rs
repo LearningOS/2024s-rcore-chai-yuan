@@ -1,4 +1,5 @@
 //! Types related to task management & Functions for completely changing TCB
+use super::scheduler::StrideScheduler;
 use super::TaskContext;
 use super::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
 use crate::config::{MAX_SYSCALL_NUM, TRAP_CONTEXT_BASE};
@@ -74,6 +75,9 @@ pub struct TaskControlBlockInner {
 
     /// 系统调用记录
     pub syscall_times: [u32; MAX_SYSCALL_NUM],
+
+    /// 调度相关
+    pub scheduler: StrideScheduler,
 }
 
 impl TaskControlBlockInner {
@@ -126,6 +130,7 @@ impl TaskControlBlock {
                     program_brk: user_sp,
                     frist_run_time: 0,
                     syscall_times: [0; MAX_SYSCALL_NUM],
+                    scheduler: StrideScheduler::new(),
                 })
             },
         };
@@ -201,6 +206,7 @@ impl TaskControlBlock {
                     program_brk: parent_inner.program_brk,
                     frist_run_time: 0,
                     syscall_times: [0; MAX_SYSCALL_NUM],
+                    scheduler: parent_inner.scheduler,
                 })
             },
         });
