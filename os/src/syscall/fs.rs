@@ -92,6 +92,7 @@ pub fn sys_fstat(fd: usize, st: *mut Stat) -> isize {
     };
     if let Some(file) = &inner.fd_table[fd] {
         let file = file.clone();
+        drop(inner);
         file.stat(&mut stat);
         // 拷贝到用户空间
         // 更换了更加优雅的跨页写法
