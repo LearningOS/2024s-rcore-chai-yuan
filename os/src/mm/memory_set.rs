@@ -318,6 +318,51 @@ impl MemorySet {
             false
         }
     }
+    /// 新增一块映射区域
+    pub fn insert_dyn_area(
+        &mut self,
+        start_va: VirtAddr,
+        end_va: VirtAddr,
+        permission: MapPermission,
+    ) -> isize {
+        let mut start_vpn: VirtPageNum = start_va.into();
+        let end_vpn: VirtPageNum = end_va.ceil();
+
+        while start_vpn != end_vpn {
+            if let Some(pte) = self.page_table.translate(start_vpn) {
+                // 已经被映射过了
+                if pte.is_valid() {
+                    return -1;
+                }
+            }
+
+            let now_start: VirtAddr = start_vpn.into();
+            let now_end: VirtAddr = (now_start.0 + 4096).into();
+            self.insert_framed_area(now_start, now_end, permission); // 每次放入1个内存帧
+            start_vpn.step();
+        }
+        0
+    }
+    /// 移除一块映射区域
+    pub fn remove_dyn_area(&mut self, start_va: VirtAddr, end_va: VirtAddr) -> isize {
+        let mut start_vpn: VirtPageNum = start_va.into();
+        let end_vpn: VirtPageNum = end_va.ceil();
+
+        while start_vpn != end_vpn {
+            // 试图移除不存在的区域
+            if let Some(pte) = self.page_table.translate(start_vpn) {
+                if !pte.is_valid() {
+                    return -1;
+                }
+            } else {
+                return -1;
+            }
+
+            self.remove_area_with_start_vpn(start_vpn); // 每次移除一个内存帧
+            start_vpn.step();
+        }
+        0
+    }
 }
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct MapArea {

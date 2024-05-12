@@ -17,12 +17,18 @@ mod context;
 mod id;
 mod manager;
 mod processor;
+mod scheduler;
 mod switch;
 #[allow(clippy::module_inception)]
 #[allow(rustdoc::private_intra_doc_links)]
 mod task;
 
-use crate::fs::{open_file, OpenFlags};
+use crate::mm::MapPermission;
+use crate::{
+    config::MAX_SYSCALL_NUM,
+    fs::{open_file, OpenFlags},
+    mm::VirtAddr,
+};
 use alloc::sync::Arc;
 pub use context::TaskContext;
 use lazy_static::*;
@@ -119,4 +125,90 @@ lazy_static! {
 ///Add init process to the manager
 pub fn add_initproc() {
     add_task(INITPROC.clone());
+}
+
+/// 记录系统调用
+pub fn log_syscall(syscall_id: usize) {
+    if let Some(current) = current_task() {
+        let mut inner = current.inner_exclusive_access();
+        inner.syscall_times[syscall_id] += 1;
+    } else {
+        panic!("error! current_task is None");
+    }
+}
+
+/// 获得首次运行时间
+pub fn get_frist_run_time() -> usize {
+    if let Some(current) = current_task() {
+        let inner = current.inner_exclusive_access();
+        inner.frist_run_time
+    } else {
+        panic!("error! current_task is None");
+    }
+}
+
+/// 获得系统调用次数
+pub fn get_syscall_times() -> [u32; MAX_SYSCALL_NUM] {
+    if let Some(current) = current_task() {
+        let inner = current.inner_exclusive_access();
+        inner.syscall_times
+    } else {
+        panic!("error! current_task is None");
+    }
+}
+
+/// 添加内存映射区域
+pub fn add_map_area(start: usize, len: usize, port: usize) -> isize {
+    let start_va = VirtAddr::from(start);
+    let end_va = VirtAddr::from(start + len);
+    let mut per = MapPermission::U;
+    // 处理错误
+    if (port & 0x7 == 0) || (port & !0x7 != 0) {
+        return -1;
+    }
+    if !start_va.aligned() {
+        return -1;
+    }
+
+    if let Some(current) = current_task() {
+        let mut inner = current.inner_exclusive_access();
+
+        if port & 0x01 != 0 {
+            per |= MapPermission::R;
+        }
+        if port & 0x02 != 0 {
+            per |= MapPermission::W;
+        }
+        if port & 0x04 != 0 {
+            per |= MapPermission::X;
+        }
+
+        inner.memory_set.insert_dyn_area(start_va, end_va, per)
+    } else {
+        -1
+    }
+}
+
+/// 移除内存映射区域
+pub fn remove_map_area(start: usize, len: usize) -> isize {
+    let start_va = VirtAddr::from(start);
+    let end_va = VirtAddr::from(start + len);
+    if !start_va.aligned() {
+        return -1;
+    }
+
+    if let Some(current) = current_task() {
+        let mut inner = current.inner_exclusive_access();
+        inner.memory_set.remove_dyn_area(start_va, end_va)
+    } else {
+        -1
+    }
+}
+
+/// 设置当前进程优先级
+pub fn set_scheduler_priority(prio: isize) {
+    if let Some(current) = current_task() {
+        let mut inner = current.inner_exclusive_access();
+        inner.scheduler.set_priority(prio);
+    }
 }
