@@ -222,7 +222,7 @@ impl Inode {
         let mut inode_id: Option<u32> = None;
         let mut v: Vec<DirEntry> = Vec::new();
 
-        // Get `inode_id` and all **remaining** `DirEntry`.
+        // 查找并收集目录项信息
         self.modify_disk_inode(|root_inode| {
             let file_count = (root_inode.size as usize) / DIRENT_SZ;
             for i in 0..file_count {
@@ -239,7 +239,7 @@ impl Inode {
             }
         });
 
-        // Reset the data_block that stores the DirEntries.
+        // 将重置后的结果写入
         self.modify_disk_inode(|root_inode| {
             let size = root_inode.size;
             let data_blocks_dealloc = root_inode.clear_size(&self.block_device);
@@ -256,6 +256,7 @@ impl Inode {
             return None;
         }
 
+        // 这时候已经找到旧的inode了，那么修改它，如果硬链接数为0,那么删除掉
         // Get position of old inode.
         let (block_id, block_offset) = fs.get_disk_inode_pos(inode_id.unwrap());
 
@@ -276,7 +277,7 @@ impl Inode {
                 }
             });
 
-        // Since we may have writed the cached block, we need to flush the cache.
+        // 刷新缓存
         block_cache_sync_all();
         Some(())
     }

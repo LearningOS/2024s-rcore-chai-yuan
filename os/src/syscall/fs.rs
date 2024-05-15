@@ -1,5 +1,5 @@
 //! File and filesystem-related syscalls
-use crate::fs::{open_file, OpenFlags, Stat, StatMode};
+use crate::fs::{open_file, root_inode_link, root_inode_unlink, OpenFlags, Stat, StatMode};
 use crate::mm::{translated_byte_buffer, translated_str, UserBuffer};
 use crate::task::{current_task, current_user_token};
 
@@ -120,12 +120,8 @@ pub fn sys_linkat(old_name: *const u8, new_name: *const u8) -> isize {
     let token = current_user_token();
     let old_name = translated_str(token, old_name);
     let new_name = translated_str(token, new_name);
-    if let Some(inode) = open_file(old_name.as_str(), OpenFlags::RDONLY) {
-        if let Some(_) = inode.link(&old_name, &new_name) {
-            0
-        } else {
-            -1
-        }
+    if let Some(_) = root_inode_link(&old_name, &new_name) {
+        0
     } else {
         -1
     }
@@ -136,12 +132,8 @@ pub fn sys_unlinkat(name: *const u8) -> isize {
     trace!("kernel:pid[{}] sys_unlinkat", current_task().unwrap().pid.0);
     let token = current_user_token();
     let name = translated_str(token, name);
-    if let Some(inode) = open_file(name.as_str(), OpenFlags::RDONLY) {
-        if let Some(_) = inode.unlink(&name) {
-            0
-        } else {
-            -1
-        }
+    if let Some(_) = root_inode_unlink(&name) {
+        0
     } else {
         -1
     }
