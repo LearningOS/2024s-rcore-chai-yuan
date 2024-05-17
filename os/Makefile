@@ -30,7 +30,7 @@ TEST ?= $(CHAPTER)
 BASE ?= 1
 
 # Disassembly
-DISASM ?= -x
+DISASM ?= -d
 
 # Run usertests or usershell
 TEST ?=
@@ -61,7 +61,7 @@ clean:
 	@cargo clean
 
 disasm: kernel
-	@$(OBJDUMP) $(DISASM) $(KERNEL_ELF) | less
+	@$(OBJDUMP) $(DISASM) $(KERNEL_ELF)
 
 disasm-vim: kernel
 	@$(OBJDUMP) $(DISASM) $(KERNEL_ELF) > $(DISASM_TMP)

@@ -204,3 +204,15 @@ pub fn remove_inactive_task(task: Arc<TaskControlBlock>) {
     trace!("kernel: remove_inactive_task .. remove_timer");
     remove_timer(Arc::clone(&task));
 }
+
+/// 为当前进程开启死锁检测
+pub fn current_enable_deadlock_detect(enable: usize) -> isize {
+    let process = current_process();
+    let mut process_inner = process.inner_exclusive_access();
+    if enable == 1 {
+        process_inner.enable_deadlock_detect = true;
+    } else {
+        process_inner.enable_deadlock_detect = false;
+    }
+    0
+}
