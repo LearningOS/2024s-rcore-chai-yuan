@@ -51,10 +51,19 @@ pub fn sys_mutex_create(blocking: bool) -> isize {
         .map(|(id, _)| id)
     {
         process_inner.mutex_list[id] = mutex;
+
+        // 创建新资源标记
+        process_inner.available[id as usize] = 1;
+
         id as isize
     } else {
         process_inner.mutex_list.push(mutex);
-        process_inner.mutex_list.len() as isize - 1
+        let id = process_inner.mutex_list.len() as isize - 1;
+
+        // 创建新资源标记
+        process_inner.available[id as usize] = 1;
+
+        id
     }
 }
 /// mutex lock syscall
@@ -71,14 +80,34 @@ pub fn sys_mutex_lock(mutex_id: usize) -> isize {
             .tid
     );
     let process = current_process();
-    if process.deadlock_detect() {
-        return -0xDEAD;
+    let task = current_task().unwrap();
+
+    // 死锁检测
+    {
+        let mut task_inner = task.inner_exclusive_access();
+        task_inner.request = Some(mutex_id);
+        drop(task_inner);
+        if process.deadlock_detect() {
+            let mut task_inner = task.inner_exclusive_access();
+            task_inner.request = None;
+            return -0xDEAD;
+        }
     }
+
     let process_inner = process.inner_exclusive_access();
     let mutex = Arc::clone(process_inner.mutex_list[mutex_id].as_ref().unwrap());
     drop(process_inner);
     drop(process);
     mutex.lock();
+    // 标记分配
+    {
+        let process = current_process();
+        let mut process_inner = process.inner_exclusive_access();
+        let mut task_inner = task.inner_exclusive_access();
+        process_inner.available[mutex_id] -= 1;
+        task_inner.request = None;
+        task_inner.allocation[mutex_id] += 1;
+    }
     0
 }
 /// mutex unlock syscall
@@ -95,16 +124,26 @@ pub fn sys_mutex_unlock(mutex_id: usize) -> isize {
             .tid
     );
     let process = current_process();
+
     let process_inner = process.inner_exclusive_access();
     let mutex = Arc::clone(process_inner.mutex_list[mutex_id].as_ref().unwrap());
     drop(process_inner);
     drop(process);
     mutex.unlock();
+    // 释放资源标记
+    {
+        let process = current_process();
+        let mut process_inner = process.inner_exclusive_access();
+        let task = current_task().unwrap();
+        let mut task_inner = task.inner_exclusive_access();
+        process_inner.available[mutex_id] = 1;
+        task_inner.allocation[mutex_id] = 0;
+    }
     0
 }
 /// semaphore create syscall
 pub fn sys_semaphore_create(res_count: usize) -> isize {
-    trace!(
+    info!(
         "kernel:pid[{}] tid[{}] sys_semaphore_create",
         current_task().unwrap().process.upgrade().unwrap().getpid(),
         current_task()
@@ -132,11 +171,15 @@ pub fn sys_semaphore_create(res_count: usize) -> isize {
             .push(Some(Arc::new(Semaphore::new(res_count))));
         process_inner.semaphore_list.len() - 1
     };
+
+    // 创建新资源标记
+    process_inner.available[id as usize] = res_count as u32;
+
     id as isize
 }
 /// semaphore up syscall
 pub fn sys_semaphore_up(sem_id: usize) -> isize {
-    trace!(
+    info!(
         "kernel:pid[{}] tid[{}] sys_semaphore_up",
         current_task().unwrap().process.upgrade().unwrap().getpid(),
         current_task()
@@ -152,11 +195,19 @@ pub fn sys_semaphore_up(sem_id: usize) -> isize {
     let sem = Arc::clone(process_inner.semaphore_list[sem_id].as_ref().unwrap());
     drop(process_inner);
     sem.up();
+    // 释放资源标记
+    {
+        let mut process_inner = process.inner_exclusive_access();
+        let task = current_task().unwrap();
+        let mut task_inner = task.inner_exclusive_access();
+        process_inner.available[sem_id] += 1;
+        task_inner.allocation[sem_id] -= 1;
+    }
     0
 }
 /// semaphore down syscall
 pub fn sys_semaphore_down(sem_id: usize) -> isize {
-    trace!(
+    info!(
         "kernel:pid[{}] tid[{}] sys_semaphore_down",
         current_task().unwrap().process.upgrade().unwrap().getpid(),
         current_task()
@@ -168,13 +219,32 @@ pub fn sys_semaphore_down(sem_id: usize) -> isize {
             .tid
     );
     let process = current_process();
-    if process.deadlock_detect() {
-        return -0xDEAD;
+    let task = current_task().unwrap();
+
+    // 死锁检测
+    {
+        let mut task_inner = task.inner_exclusive_access();
+        task_inner.request = Some(sem_id);
+        drop(task_inner);
+        if process.deadlock_detect() {
+            let mut task_inner = task.inner_exclusive_access();
+            task_inner.request = None;
+            return -0xDEAD;
+        }
     }
+
     let process_inner = process.inner_exclusive_access();
     let sem = Arc::clone(process_inner.semaphore_list[sem_id].as_ref().unwrap());
     drop(process_inner);
     sem.down();
+    // 标记分配
+    {
+        let mut process_inner = process.inner_exclusive_access();
+        let mut task_inner = task.inner_exclusive_access();
+        process_inner.available[sem_id] -= 1;
+        task_inner.request = None;
+        task_inner.allocation[sem_id] += 1;
+    }
     0
 }
 /// condvar create syscall

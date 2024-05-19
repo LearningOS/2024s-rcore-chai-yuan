@@ -51,6 +51,8 @@ pub struct ProcessControlBlockInner {
     pub condvar_list: Vec<Option<Arc<Condvar>>>,
     /// 死锁检测开关
     pub enable_deadlock_detect: bool,
+    /// 可获取的同步资源
+    pub available: [u32; 8],
 }
 
 impl ProcessControlBlockInner {
@@ -122,6 +124,7 @@ impl ProcessControlBlock {
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
                     enable_deadlock_detect: false,
+                    available: [0; 8],
                 })
             },
         });
@@ -249,6 +252,7 @@ impl ProcessControlBlock {
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
                     enable_deadlock_detect: false,
+                    available: [0; 8],
                 })
             },
         });
@@ -288,11 +292,51 @@ impl ProcessControlBlock {
     }
     /// 检测死锁
     pub fn deadlock_detect(&self) -> bool {
+        info!("detect");
         let inner = self.inner_exclusive_access();
-        if inner.enable_deadlock_detect != false {
+        if inner.enable_deadlock_detect == false {
             return false;
         }
+        // 初始化
+        let task_len = inner.tasks.len();
+        let mut work = inner.available.clone();
+        let mut finish = vec![false; task_len];
+        for tid in 0..task_len {
+            let task = inner.get_task(tid);
+            let task_inner = task.inner_exclusive_access();
+            if task_inner.allocation.iter().all(|x| *x == 0) {
+                finish[tid] = true;
+            }
+        }
 
-        false
+        loop {
+            let mut check = false;
+
+            for tid in 0..task_len {
+                // 找到一个满足条件的线程
+                let task = inner.get_task(tid);
+                let task_inner = task.inner_exclusive_access();
+
+                let cond1 = !finish[tid];
+                let cond2 = task_inner.request.is_none()
+                    || (task_inner.request.is_some() && work[task_inner.request.unwrap()] != 0);
+
+                if cond1 && cond2 {
+                    for i in 0..8 {
+                        work[i] += task_inner.allocation[i];
+                    }
+                    finish[tid] = true;
+                    check = true;
+                }
+            }
+
+            // 没有找到满足条件的，检查finish
+            if check == false {
+                if finish.iter().any(|x| *x == false) {
+                    return true;
+                }
+                return false;
+            }
+        }
     }
 }
